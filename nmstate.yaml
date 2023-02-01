@@ -1,0 +1,43 @@
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: br1-eno8403np1-policy 
+spec:
+  nodeSelector: 
+    node-role.kubernetes.io/worker: "" 
+  maxUnavailable: 1
+  desiredState:
+    routes:
+      config:
+        - destination: fc00:124::/64
+          metric: 150
+          next-hop-address: fc00:123::1
+          next-hop-interface: br1
+          table-id: 254
+    interfaces:
+      - name: br1
+        description: Linux bridge with eno8403np1 as a port 
+        type: linux-bridge
+        state: up
+        ipv4:
+          dhcp: false
+          enabled: true
+          auto-dns: false
+          auto-gateway: false
+          address:
+            - ip: 192.168.123.10
+              prefix-length: 24
+        ipv6:
+          dhcp: false
+          enabled: true
+          auto-dns: false
+          auto-gateway: false
+          address:
+            - ip: fc00:123::10
+              prefix-length: 64
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            - name: eno8403np1

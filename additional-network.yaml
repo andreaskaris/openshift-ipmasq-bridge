@@ -1,0 +1,35 @@
+spec:
+  additionalNetworks:
+  - name: br1-net
+    namespace: default
+    type: Raw
+    rawCNIConfig: |-
+        {
+        	"cniVersion": "0.3.1",
+        	"name": "test-nad",
+        	"plugins": [{
+        		"type": "bridge",
+        		"bridge": "br1",
+        		"vlan": 0,
+        		"ipMasq": true,
+        		"ipam": {
+        			"datastore": "kubernetes",
+        			"kubernetes": {
+        				"kubeconfig": "/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
+        			},
+        			"type": "whereabouts",
+        			"range": "fc00:123::/64",
+        			"range_start": "fc00:123::20",
+        			"range_end": "fc00:123::29",
+        			"routes": [{
+        				"dst": "fc00:124::/64",
+        				"gw": "fc00:123::10"
+        			},{
+        				"dst": "2600:52:7:18::/64",
+        				"gw": "fc00:123::10"
+        			}],
+        			"log_file": "/var/log/whereabouts.log",
+        			"log_level": "debug"
+        		}
+        	}]
+        }
