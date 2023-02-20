@@ -14,6 +14,11 @@ spec:
           next-hop-address: fc00:123::1
           next-hop-interface: br1
           table-id: 254
+        - destination: 9.0.0.0/24
+          metric: 150
+          next-hop-address: 192.168.123.1
+          next-hop-interface: br1
+          table-id: 254
     interfaces:
       - name: br1
         description: Linux bridge with eno8403np1 as a port 
