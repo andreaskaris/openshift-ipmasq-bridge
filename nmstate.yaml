@@ -1,7 +1,7 @@
 apiVersion: nmstate.io/v1
 kind: NodeNetworkConfigurationPolicy
 metadata:
-  name: br1-eno8403np1-policy 
+  name: br123-br124-vlan-eno8403np1-policy 
 spec:
   nodeSelector: 
     node-role.kubernetes.io/worker: "" 
@@ -9,13 +9,30 @@ spec:
   desiredState:
     routes:
       config:
-        - destination: fc00:124::/64
+        - destination: 9.0.0.0/24
           metric: 150
-          next-hop-address: fc00:123::1
-          next-hop-interface: br1
-          table-id: 254
+          next-hop-address: 192.168.123.1
+          next-hop-interface: br123
+          table-id: 123
+        - destination: 9.0.0.0/24
+          metric: 150
+          next-hop-address: 192.168.124.1
+          next-hop-interface: br124
+          table-id: 124
     interfaces:
-      - name: br1
+      - name: eno8403np1.123
+        type: vlan
+        state: up
+        vlan:
+          base-iface: eno8403np1
+          id: 123
+      - name: eno8403np1.124
+        type: vlan
+        state: up
+        vlan:
+          base-iface: eno8403np1
+          id: 124
+      - name: br123
         description: Linux bridge with eno8403np1 as a port 
         type: linux-bridge
         state: up
@@ -27,17 +44,41 @@ spec:
           address:
             - ip: 192.168.123.10
               prefix-length: 24
-        ipv6:
-          dhcp: false
-          enabled: true
-          auto-dns: false
-          auto-gateway: false
-          address:
-            - ip: fc00:123::10
-              prefix-length: 64
         bridge:
           options:
             stp:
               enabled: false
           port:
-            - name: eno8403np1
+            - name: eno8403np1.123
+      - name: br124
+        description: Linux bridge with eno8403np1 as a port 
+        type: linux-bridge
+        state: up
+        ipv4:
+          dhcp: false
+          enabled: true
+          auto-dns: false
+          auto-gateway: false
+          address:
+            - ip: 192.168.124.10
+              prefix-length: 24
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            - name: eno8403np1.124
+      - name: vrf123
+        type: vrf
+        state: up
+        vrf:
+          port:
+          - br123
+          route-table-id: 123
+      - name: vrf124
+        type: vrf
+        state: up
+        vrf:
+          port:
+          - br124
+          route-table-id: 124

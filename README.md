@@ -1,34 +1,49 @@
 ## Lab layout
 
 ~~~
+                                     WORKER NODE                                                                EXTERNAL TARGET
 
-                              WORKER NODE                                 EXTERNAL TARGET
-
-                     +----------------+
-                     |                |
-                +----+  br-ex         +--------------+             +-----------------------------+
-                |    |                |              |             |     +---------------------+ |
-                |    +-+--------------+              |             |     |       loopback      | |
-+---------------+--+   |    +------------------------+-----+       |     |    (fc00:124::1)    | |
-|      POD         |   |    |                              |       |     |                     | |
-|             eth0 +---+    |                              |       |     |                     | |
-|                  |        |                              |       |     +---------------------+ |
-|                  |        |                              |       |                             |
-|                  |        |        br1                   |       |                             |
-|             net1 +--------+        (fc00:123::10)        +-------+ eth0                        |
-|   (fc00:123::20) |        |                              |       | (fc00:123::1)               |
-|                  |        |                              |       |                             |
-|                  |        |                              |       |                             |
-+---------------+--+        +------------------------+-----+       |                             |
-                |                                    |             |                             |
-                +------------------------------------+             +-----------------------------+
-
-
-                 pod routes:
-                 fc00:124::/64 via fc00:123::10
-
-                 node routes:
-                 fc00:124::/64 via fc00:123::1
+                              +----------------------------+
+                              |                            |
+                 +------------+       br-ex                +----------+
+                 |            |                            |          |
+                 |            |                            |          |
+                 |            +-------+-------+------------+          |
+                 |                    |       |                       |
+                 |                    |       |                       |
++------------------------------+      |       |                       |
+|                              |      |       |                       |
+|                              |      |       |                       |
+|                      eth0    +------+       |         +-------------------------------+                   +-------------------+
+|                              |                        |             |                 |                   |                   |
+|                              |   (192.168.123.0/24)   |           br123               |  (9.0.0.0/24)     |                   |
+|   192.168.123.20     net1    +------------------------+     (192.168.123.10/24)       +-------------------+ eth0 9.0.0.1:8000 |   (vrf 123 red)
+|(9.0.0.0/24 via 192.168.123.1)|                        | (9.0.0.0/24 ^ia 192.168.123.1)|                   |                   |
+|                              |              |         +-------------------------------+                   +-------------------+
+|                              |              |                       |
+|                              |              |                       |
+|                              |              |                       |
++------------------------------+              |                       |         
+                 |                            |                       |
+                 |                            |                       |
+                 |                            |                       |
++------------------------------+              |                       |
+|                              |              |                       |
+|                              |              |                       |
+|                      eth0    +--------------+        +--------------------------------+                   +-------------------+
+|                              |                       |              |                 |                   |                   |
+|                              |    (192.168.124.0/24) |            br124               |  (9.0.0.0/24)     |                   |
+|   192.168.124.20     net1    +-----------------------+     (192.168.124.10/24)        +-------------------+ eth0 9.0.0.1:8000 |   (vrf 124 blue)
+|(9.0.0.0/24 via 192.168.124.1)|                       | (9.0.0.0/24 ^ia 192.168.124.1) |                   |                   |
+|                              |                       +--------------+-----------------+                   +-------------------+
+|                              |                                      |
+|                              |                                      |
+|                              |                                      |
++------------------------------+                                      |
+                 |                                                    |
+                 |                                                    |
+                 |                                                    |
+                 +----------------------------------------------------+
 ~~~
 
 ## Configuration steps
@@ -57,92 +72,105 @@ The cluster version for this test is 4.12.1:
 ~~~
 $ oc get clusterversion
 NAME      VERSION   AVAILABLE   PROGRESSING   SINCE   STATUS
-version   4.12.1    True        False         2d20h   Cluster version is 4.12.1
+version   4.12.0    True        False         9d      Cluster version is 4.12.0
 ~~~
 
-Make sure that the node has a route out of br1 to fc00:124::/64 which will be our off cluster target (see `nmstate.yaml` for the static route configuration):
+Check the VRF setup on the worker node:
 ~~~
-sh-4.4# ip -6 r | grep fc00:124
-fc00:124::/64 via fc00:123::1 dev br1 proto static metric 150 pref medium
-~~~
-
-Create the pod with `deployment.yaml`. After pod creation, we can `oc debug node/<node name>` and then verify the MASQUERADE rule:
-~~~
-sh-4.4# chroot /host ip6tables-save | grep MASQ
-:KUBE-MARK-MASQ - [0:0]
--A KUBE-MARK-MASQ -j MARK --set-xmark 0x4000/0x4000
--A KUBE-POSTROUTING -m comment --comment "kubernetes service traffic requiring SNAT" -j MASQUERADE --random-fully
--A CNI-3511213dc514e5a96e8c93d3 ! -d ff00::/8 -m comment --comment "name: \"test-nad\" id: \"3945ddfe53a5e42a96e0fe6fc89555506d88110388f57db2d2402de9cdffd25a\"" -j MASQUERADE
-~~~
-
-Let's make sure that the default settings are configured and that the br_netfilter module is *not* loaded:
-~~~
-sh-4.4# chroot /host lsmod | grep br
-bridge                282624  0
-stp                    16384  1 bridge
-llc                    16384  2 bridge,stp
-sh-4.4# chroot /host sysctl -a | grep bridge
-sysctl: unable to open directory "/proc/sys/fs/binfmt_misc/"
-sh-4.4# 
-~~~
-
-Now, connect to the pod and list its IPv6 IP configuration:
-~~~
-[akaris@linux ipMasq]$ oc get pods
-NAME                                  READY   STATUS    RESTARTS   AGE
-netshoot-deployment-8cb7ccdb6-pms8h   1/1     Running   0          4m14s
-[akaris@linux ipMasq]$ oc rsh netshoot-deployment-8cb7ccdb6-pms8h
-~ # ip -6 a
-1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
-    inet6 ::1/128 scope host
+$ oc debug node/<node name>
+(...)
+sh-4.4# ip vrf ls
+Name              Table
+-----------------------
+vrf123             123
+vrf124             124
+sh-4.4# ip route ls vrf vrf123
+9.0.0.0/24 via 192.168.123.1 dev br123 proto static metric 150
+192.168.123.0/24 dev br123 proto kernel scope link src 192.168.123.10 metric 427
+sh-4.4# ip route ls vrf vrf124
+9.0.0.0/24 via 192.168.124.1 dev br124 proto static metric 150
+192.168.124.0/24 dev br124 proto kernel scope link src 192.168.124.10 metric 428
+sh-4.4# ip a ls dev br123
+5042: br123: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master vrf123 state UP group default qlen 1000
+    link/ether 30:d0:42:d9:b8:7b brd ff:ff:ff:ff:ff:ff
+    inet 192.168.123.10/24 brd 192.168.123.255 scope global noprefixroute br123
        valid_lft forever preferred_lft forever
-2: eth0@if118: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1400 state UP
-    inet6 fd01:0:0:1::f/64 scope global
+sh-4.4# ip a ls dev br124
+5043: br124: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master vrf124 state UP group default qlen 1000
+    link/ether 2e:19:d9:5b:80:fd brd ff:ff:ff:ff:ff:ff
+    inet 192.168.124.10/24 brd 192.168.124.255 scope global noprefixroute br124
        valid_lft forever preferred_lft forever
-    inet6 fe80::858:aff:fe80:f/64 scope link
-       valid_lft forever preferred_lft forever
-3: net1@if119: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP
-    inet6 fc00:123::20/64 scope global
-       valid_lft forever preferred_lft forever
-    inet6 fe80::c6:f9ff:fe66:653c/64 scope link
-       valid_lft forever preferred_lft forever
-~ # ip -6 r
-2600:52:7:18::/64 dev net1 proto kernel metric 256 expires 42939sec pref medium
-2600:52:7:18::/64 via fc00:123::10 dev net1 metric 1024 pref medium
-fc00:123::/64 dev net1 proto kernel metric 256 pref medium
-fc00:124::/64 via fc00:123::10 dev net1 metric 1024 pref medium
-fd01:0:0:1::/64 dev eth0 proto kernel metric 256 pref medium
-fe80::/64 dev eth0 proto kernel metric 256 pref medium
-fe80::/64 dev net1 proto kernel metric 256 pref medium
-default via fd01:0:0:1::1 dev eth0 metric 1024 pref medium
 ~~~
 
-Now, go to external host fc00:123::1 and run a tcpdump there. Then, ping from the pod to fc00:124::1
+The deployed pods are:
 ~~~
-~ # ping fc00:124::1
-PING fc00:124::1(fc00:124::1) 56 data bytes
-64 bytes from fc00:124::1: icmp_seq=1 ttl=63 time=0.566 ms
-64 bytes from fc00:124::1: icmp_seq=2 ttl=63 time=0.423 ms
-^C
---- fc00:124::1 ping statistics ---
-2 packets transmitted, 2 received, 0% packet loss, time 1031ms
-rtt min/avg/max/mdev = 0.423/0.494/0.566/0.071 ms
-~ # 
+$ oc get pods
+NAME                                      READY   STATUS    RESTARTS   AGE
+netshoot123-deployment-67c55c9f4f-d9mps   1/1     Running   0          4m39s
+netshoot124-deployment-7465b55b6f-gs5vp   1/1     Running   0          4m39s
 ~~~
 
-And the tcpdump shows that traffic is correctly masqueraded:
+Check the IP address setup:
 ~~~
-# tcpdump -nne -i eth0 -l icmp6 | egrep 'reply|request'
-dropped privs to tcpdump
-tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
-listening on eth0, link-type EN10MB (Ethernet), snapshot length 262144 bytes
-09:31:18.894164 30:d0:42:da:54:81 > 52:54:00:bd:6f:be, ethertype IPv6 (0x86dd), length 118: fc00:123::10 > fc00:124::1: ICMP6, echo request, id 7, seq 1, length 64
-09:31:18.894187 52:54:00:bd:6f:be > 30:d0:42:da:54:81, ethertype IPv6 (0x86dd), length 118: fc00:124::1 > fc00:123::10: ICMP6, echo reply, id 7, seq 1, length 64
-09:31:19.924701 30:d0:42:da:54:81 > 52:54:00:bd:6f:be, ethertype IPv6 (0x86dd), length 118: fc00:123::10 > fc00:124::1: ICMP6, echo request, id 7, seq 2, length 64
-09:31:19.924725 52:54:00:bd:6f:be > 30:d0:42:da:54:81, ethertype IPv6 (0x86dd), length 118: fc00:124::1 > fc00:123::10: ICMP6, echo reply, id 7, seq 2, length 64
-^C12 packets captured
-12 packets received by filter
-0 packets dropped by kernel
+$ oc exec -it netshoot123-deployment-67c55c9f4f-d9mps -- /bin/bash -c "ip a;ip r"
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0@if5090: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1400 qdisc noqueue state UP group default 
+    link/ether 0a:58:0a:80:00:b8 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 10.128.0.184/23 brd 10.128.1.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::858:aff:fe80:b8/64 scope link 
+       valid_lft forever preferred_lft forever
+3: net1@if5091: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether da:18:44:01:c6:6f brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 192.168.123.20/24 brd 192.168.123.255 scope global net1
+       valid_lft forever preferred_lft forever
+    inet6 fe80::d818:44ff:fe01:c66f/64 scope link 
+       valid_lft forever preferred_lft forever
+default via 10.128.0.1 dev eth0 
+9.0.0.0/24 via 192.168.123.1 dev net1 
+10.128.0.0/23 dev eth0 proto kernel scope link src 10.128.0.184 
+192.168.123.0/24 dev net1 proto kernel scope link src 192.168.123.20 
 ~~~
 
-One can also do the opposite test. Delete the deployment and wait until the pod is gone. Make sure that the MASQUERADE rule is removed from the node. Then, update the net-attach-def by setting `"ipMasq": false` and by patching the cluster network operator CR. After that, verify the net-attach-def's content (make sure that the setting was propagated). Then, respawn the deployment. Make sure that the MASQUERADE ip6tables rule was *not* written this time. Then, rerun the same test - you will now see the pod IPv6 address as the source of the traffic.
+~~~
+$ oc exec -it netshoot124-deployment-7465b55b6f-gs5vp -- /bin/bash -c "ip a;ip r"
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0@if5092: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1400 qdisc noqueue state UP group default 
+    link/ether 0a:58:0a:80:00:b9 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 10.128.0.185/23 brd 10.128.1.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::858:aff:fe80:b9/64 scope link 
+       valid_lft forever preferred_lft forever
+3: net1@if5093: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 92:64:88:e5:4c:7e brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet 192.168.124.20/24 brd 192.168.124.255 scope global net1
+       valid_lft forever preferred_lft forever
+    inet6 fe80::9064:88ff:fee5:4c7e/64 scope link 
+       valid_lft forever preferred_lft forever
+default via 10.128.0.1 dev eth0 
+9.0.0.0/24 via 192.168.124.1 dev net1 
+10.128.0.0/23 dev eth0 proto kernel scope link src 10.128.0.185 
+192.168.124.0/24 dev net1 proto kernel scope link src 192.168.124.20
+~~~
+
+Now, curl IP address 9.0.0.1 from both pods. In each VRF, the subnet 9.0.0.0/24 is part of a different routing domain.
+There are 2 servers with the same IP 9.0.0.1, and we can verify that we reach each of them with:
+~~~
+$ oc exec -it netshoot123-deployment-67c55c9f4f-d9mps -- /bin/bash -c "curl 9.0.0.1:8000"
+vrf 123 red
+~~~
+
+~~~
+$ oc exec -it netshoot124-deployment-7465b55b6f-gs5vp -- /bin/bash -c "curl 9.0.0.1:8000"
+vrf 124 blue
+~~~

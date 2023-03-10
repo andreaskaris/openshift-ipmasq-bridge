@@ -1,15 +1,15 @@
 spec:
   additionalNetworks:
-  - name: br1-net
+  - name: br123-net
     namespace: default
     type: Raw
     rawCNIConfig: |-
         {
         	"cniVersion": "0.3.1",
-        	"name": "test-nad",
+        	"name": "br123-nad",
         	"plugins": [{
         		"type": "bridge",
-        		"bridge": "br1",
+        		"bridge": "br123",
         		"vlan": 0,
         		"ipMasq": true,
         		"ipam": {
@@ -18,15 +18,42 @@ spec:
         				"kubeconfig": "/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
         			},
         			"type": "whereabouts",
-        			"range": "fc00:123::/64",
-        			"range_start": "fc00:123::20",
-        			"range_end": "fc00:123::29",
+        			"range": "192.168.123.0/24",
+        			"range_start": "192.168.123.20",
+        			"range_end": "192.168.123.29",
         			"routes": [{
-        				"dst": "fc00:124::/64",
-        				"gw": "fc00:123::10"
-        			},{
-        				"dst": "2600:52:7:18::/64",
-        				"gw": "fc00:123::10"
+        				"dst": "9.0.0.0/24",
+        				"gw": "192.168.123.1"
+        			}],
+        			"log_file": "/var/log/whereabouts.log",
+        			"log_level": "debug"
+        		}
+        	}]
+        }
+  - name: br124-net
+    namespace: default
+    type: Raw
+    rawCNIConfig: |-
+        {
+        	"cniVersion": "0.3.1",
+        	"name": "br124-nad",
+        	"plugins": [{
+        		"type": "bridge",
+        		"bridge": "br124",
+        		"vlan": 0,
+        		"ipMasq": true,
+        		"ipam": {
+        			"datastore": "kubernetes",
+        			"kubernetes": {
+        				"kubeconfig": "/etc/kubernetes/cni/net.d/whereabouts.d/whereabouts.kubeconfig"
+        			},
+        			"type": "whereabouts",
+        			"range": "192.168.124.0/24",
+        			"range_start": "192.168.124.20",
+        			"range_end": "192.168.124.29",
+        			"routes": [{
+        				"dst": "9.0.0.0/24",
+        				"gw": "192.168.124.1"
         			}],
         			"log_file": "/var/log/whereabouts.log",
         			"log_level": "debug"

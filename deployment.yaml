@@ -1,20 +1,46 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: netshoot-deployment
+  name: netshoot123-deployment
   labels:
-    app: netshoot-deployment
+    app: netshoot123-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: netshoot-pod
+      app: netshoot123-pod
   template:
     metadata:
       annotations:
-        k8s.v1.cni.cncf.io/networks: br1-net
+        k8s.v1.cni.cncf.io/networks: br123-net
       labels:
-        app: netshoot-pod
+        app: netshoot123-pod
+    spec:
+      containers:
+      - name: netshoot
+        image: nicolaka/netshoot
+        command:
+          - sleep
+          - "3600"
+        imagePullPolicy: IfNotPresent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netshoot124-deployment
+  labels:
+    app: netshoot124-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netshoot124-pod
+  template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: br124-net
+      labels:
+        app: netshoot124-pod
     spec:
       containers:
       - name: netshoot
