@@ -100,6 +100,12 @@ sh-4.4# ip a ls dev br124
     link/ether 2e:19:d9:5b:80:fd brd ff:ff:ff:ff:ff:ff
     inet 192.168.124.10/24 brd 192.168.124.255 scope global noprefixroute br124
        valid_lft forever preferred_lft forever
+sh-4.4# ip a ls dev eno8403np1.123
+5044: eno8403np1.123@eno8403np1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br123 state UP group default qlen 1000
+    link/ether 30:d0:42:d9:b8:7b brd ff:ff:ff:ff:ff:ff
+sh-4.4# ip a ls dev eno8403np1.124
+5045: eno8403np1.124@eno8403np1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br124 state UP group default qlen 1000
+    link/ether 30:d0:42:d9:b8:7b brd ff:ff:ff:ff:ff:ff
 ~~~
 
 The deployed pods are:
